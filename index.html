@@ -2,67 +2,78 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>点滅刺激</title>
   <style>
     body {
       margin: 0;
       background-color: black;
+      overflow: hidden;
     }
-
     .container {
       position: relative;
       width: 100vw;
       height: 100vh;
     }
-
     .square {
-      width: 100px;
-      height: 100px;
+      width: 120px;
+      height: 120px;
       background-color: white;
       position: absolute;
-      border: 3px solid transparent;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 4px solid transparent;
       box-sizing: border-box;
     }
-
-    .square:hover {
-      border: 3px solid red;
+    #left {
+      left: calc(50% - 200px);  /* 左配置 */
     }
-
-
-    #right  { top: 50%;  right: 10%; transform: translateY(-50%); }
-
-    #left   { top: 50%;  left: 10%; transform: translateY(-50%); }
+    #right {
+      left: calc(50% + 80px);   /* 右配置 */
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <div id="top" class="square"></div>
-    <div id="right" class="square"></div>
-    <div id="bottom" class="square"></div>
     <div id="left" class="square"></div>
+    <div id="right" class="square"></div>
   </div>
 
   <script>
-    // 周波数ごとの点滅設定（Hz）
-    const blinkConfigs = [
-      { id: 'top',    freq: 5 },
-      { id: 'right',  freq: 6 },
-      { id: 'bottom', freq: 10 },
-      { id: 'left',   freq: 12 },
+    const configs = [
+      { id: 'left',  freq: 6 },
+      { id: 'right', freq: 10 },
     ];
 
-    // 各要素に対して点滅アニメーション
-    blinkConfigs.forEach(({ id, freq }) => {
-      const el = document.getElementById(id);
-      let isWhite = true;
-      const interval = 1000 / (freq * 2); // 半周期（ms）
+    const squares = configs.map(cfg => ({
+      el: document.getElementById(cfg.id),
+      freq: cfg.freq
+    }));
 
-      setInterval(() => {
-        el.style.backgroundColor = isWhite ? 'black' : 'white';
-        isWhite = !isWhite;
-      }, interval);
+    let startTime = null;
+
+    function animate(timestamp) {
+      if (!startTime) startTime = timestamp;
+      const elapsed = (timestamp - startTime) / 1000; // 秒
+
+      squares.forEach(({el, freq}) => {
+        const phase = Math.sin(2 * Math.PI * freq * elapsed);
+        el.style.backgroundColor = phase > 0 ? "white" : "black";
+      });
+
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+
+    // ホバーで赤枠（タッチでも効くように）
+    squares.forEach(({el}) => {
+      el.addEventListener("mouseenter", () => el.style.border = "4px solid red");
+      el.addEventListener("mouseleave", () => el.style.border = "4px solid transparent");
+
+      el.addEventListener("touchstart", () => el.style.border = "4px solid red");
+      el.addEventListener("touchend", () => el.style.border = "4px solid transparent");
     });
   </script>
 </body>
 </html>
-
