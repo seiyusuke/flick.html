@@ -3,17 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>点滅刺激</title>
+  <title>SSVEP 点滅刺激</title>
   <style>
     body {
       margin: 0;
       background-color: black;
       overflow: hidden;
-    }
-    .container {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
     }
     .square {
       width: 120px;
@@ -23,57 +18,79 @@
       top: 50%;
       transform: translateY(-50%);
       border: 4px solid transparent;
-      box-sizing: border-box;
     }
     #left {
-      left: calc(50% - 200px);  /* 左配置 */
+      left: calc(50% - 200px);
     }
     #right {
-      left: calc(50% + 80px);   /* 右配置 */
+      left: calc(50% + 80px);
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div id="left" class="square"></div>
-    <div id="right" class="square"></div>
-  </div>
+  <div id="left" class="square" style="display:none;"></div>
+  <div id="right" class="square" style="display:none;"></div>
 
   <script>
-    const configs = [
-      { id: 'left',  freq: 6 },
-      { id: 'right', freq: 10 },
+    const timeline = [
+      { type: "rest", duration: 10 },
+      { type: "stim", target: "left", freq: 5, duration: 5 },
+      { type: "rest", duration: 3 },
+      { type: "stim", target: "right", freq: 12, duration: 5 },
+      { type: "rest", duration: 3 },
+      { type: "stim", target: "left", freq: 6, duration: 5 },
+      { type: "rest", duration: 3 },
+      { type: "stim", target: "right", freq: 10, duration: 5 },
     ];
 
-    const squares = configs.map(cfg => ({
-      el: document.getElementById(cfg.id),
-      freq: cfg.freq
-    }));
+    const squares = {
+      left: document.getElementById("left"),
+      right: document.getElementById("right")
+    };
 
-    let startTime = null;
+    let currentPhase = 0;
+    let currentStart = null;
+    let stimFreq = null;
+    let stimTarget = null;
+    let animationId = null;
 
     function animate(timestamp) {
-      if (!startTime) startTime = timestamp;
-      const elapsed = (timestamp - startTime) / 1000; // 秒
-
-      squares.forEach(({el, freq}) => {
-        const phase = Math.sin(2 * Math.PI * freq * elapsed);
+      if (!currentStart) currentStart = timestamp;
+      const elapsed = (timestamp - currentStart) / 1000;
+      const phase = Math.sin(2 * Math.PI * stimFreq * elapsed);
+      if (stimTarget) {
+        const el = squares[stimTarget];
         el.style.backgroundColor = phase > 0 ? "white" : "black";
-      });
-
-      requestAnimationFrame(animate);
+      }
+      animationId = requestAnimationFrame(animate);
     }
 
-    requestAnimationFrame(animate);
+    async function runExperiment() {
+      for (const block of timeline) {
+        if (block.type === "rest") {
+          cancelAnimationFrame(animationId);
+          Object.values(squares).forEach(el => el.style.display = "none");
+          document.body.style.backgroundColor = "black";
+          await new Promise(r => setTimeout(r, block.duration * 1000));
+        } else if (block.type === "stim") {
+          stimFreq = block.freq;
+          stimTarget = block.target;
+          const el = squares[stimTarget];
+          el.style.display = "block";
+          document.body.style.backgroundColor = "black";
+          currentStart = null;
+          requestAnimationFrame(animate);
+          await new Promise(r => setTimeout(r, block.duration * 1000));
+          cancelAnimationFrame(animationId);
+          el.style.display = "none";
+        }
+      }
+      // 終了時
+      document.body.style.backgroundColor = "black";
+      alert("実験が終了しました");
+    }
 
-    // ホバーで赤枠（タッチでも効くように）
-    squares.forEach(({el}) => {
-      el.addEventListener("mouseenter", () => el.style.border = "4px solid red");
-      el.addEventListener("mouseleave", () => el.style.border = "4px solid transparent");
-
-      el.addEventListener("touchstart", () => el.style.border = "4px solid red");
-      el.addEventListener("touchend", () => el.style.border = "4px solid transparent");
-    });
+    runExperiment();
   </script>
 </body>
 </html>
