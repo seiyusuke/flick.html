@@ -1,51 +1,3 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <title>SSVEP 実験選択</title>
-  <style>
-    body {
-      margin: 0;
-      background-color: black;
-      color: white;
-      font-family: sans-serif;
-      text-align: center;
-      overflow: hidden;
-    }
-
-    h1 {
-      margin-top: 15%;
-      font-size: 48px;
-    }
-
-    .menu-button {
-      display: inline-block;
-      margin: 40px;
-      padding: 20px 60px;
-      font-size: 32px;
-      background-color: #333;
-      border: none;
-      border-radius: 10px;
-      color: white;
-      cursor: pointer;
-    }
-
-    .menu-button:hover {
-      background-color: #666;
-    }
-
-    #experiment-container {
-      display: none;
-    }
-
-    .square {
-      width: 300px;
-      height: 300px;
-      background-color: black;
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      border: 4px solid transparent;
       box-sizing: border-box;
       transition: border 0.2s;
     }
@@ -72,25 +24,73 @@
 
     #countdown {
       position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 60px;
+    }
+
+    /* === 結果表示パネルのスタイルを追加 === */
+    #results-panel {
+      position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 80px;
+      font-size: 24px;
+      background-color: rgba(34, 34, 34, 0.95);
+      padding: 30px 50px;
+      border-radius: 12px;
+      border: 2px solid #555;
+      max-height: 45vh;
+      overflow-y: auto;
+      visibility: hidden;
+      text-align: left;
+      min-width: 450px;
+      box-shadow: 0px 4px 20px rgba(255, 255, 255, 0.1);
+    }
+
+    #results-panel h2 {
+      margin-top: 0;
+      text-align: center;
+      font-size: 28px;
+      border-bottom: 2px solid #555;
+      padding-bottom: 12px;
+      color: #ff4d4d;
+    }
+
+    #results-list {
+      list-style: none;
+      padding: 0;
+      margin: 15px 0;
+    }
+
+    #results-list li {
+      margin: 12px 0;
+      font-family: monospace;
+      border-bottom: 1px dashed #444;
+      padding-bottom: 6px;
     }
 
     #restart-btn, #back-btn {
       position: absolute;
-      top: 70%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 32px;
+      font-size: 24px;
       background-color: #444;
       color: white;
-      padding: 10px 30px;
+      padding: 12px 35px;
       border: none;
       border-radius: 8px;
       cursor: pointer;
       visibility: hidden;
+    }
+
+    #restart-btn {
+      top: 80%;
+      left: calc(50% - 180px);
+    }
+
+    #back-btn {
+      top: 80%;
+      left: calc(50% + 180px);
     }
 
     #restart-btn:hover, #back-btn:hover {
@@ -112,6 +112,13 @@
     <div id="right" class="square"></div>
     <div id="arrow"></div>
     <div id="countdown"></div>
+    
+    <!-- 結果表示パネル -->
+    <div id="results-panel">
+      <h2>実験結果 (3秒間の注視率)</h2>
+      <ul id="results-list"></ul>
+    </div>
+
     <button id="restart-btn">もう一度実験を行う</button>
     <button id="back-btn">実験選択に戻る</button>
   </div>
@@ -123,10 +130,29 @@
     const right = document.getElementById("right");
     const arrow = document.getElementById("arrow");
     const countdown = document.getElementById("countdown");
+    const resultsPanel = document.getElementById("results-panel");
+    const resultsList = document.getElementById("results-list");
     const restartBtn = document.getElementById("restart-btn");
     const backBtn = document.getElementById("back-btn");
 
     let currentExperiment = null;
+    let experimentResults = []; // 各試行の結果を格納する配列
+
+    // === ホバー・タッチ状態の追跡用フラグ ===
+    let leftHovered = false;
+    let rightHovered = false;
+
+    // マウスホバーの検知
+    left.addEventListener("mouseenter", () => leftHovered = true);
+    left.addEventListener("mouseleave", () => leftHovered = false);
+    right.addEventListener("mouseenter", () => rightHovered = true);
+    right.addEventListener("mouseleave", () => rightHovered = false);
+
+    // iPhone向けタッチ対応 ＆ フラグ連動
+    left.addEventListener("touchstart", () => { leftHovered = true; left.style.border = "4px solid red"; });
+    left.addEventListener("touchend", () => { leftHovered = false; left.style.border = "4px solid transparent"; });
+    right.addEventListener("touchstart", () => { rightHovered = true; right.style.border = "4px solid red"; });
+    right.addEventListener("touchend", () => { rightHovered = false; right.style.border = "4px solid transparent"; });
 
     // ===== 実験選択 =====
     document.getElementById("exp1-btn").onclick = () => startExperiment(1);
@@ -166,25 +192,55 @@
       });
     }
 
-    // ===== 実験1：片側点滅 =====
+    // ===== 実験1：片側点滅 (時間計測の厳密化のため、requestAnimationFrame方式にアップデート) =====
     async function startFlicker(element, freq, duration, direction) {
       return new Promise(resolve => {
-        let visible = true;
-        const interval = 1000 / (freq * 2);
+        let t0 = performance.now();
         arrow.textContent = direction === "left" ? "←" : "→";
         arrow.style.visibility = "visible";
 
-        const flickerInterval = setInterval(() => {
-          element.style.backgroundColor = visible ? "white" : "black";
-          visible = !visible;
-        }, interval);
+        let matchTime = 0;       // カーソルが合っていた時間 (ms)
+        let lastTimestamp = t0;
 
-        setTimeout(() => {
-          clearInterval(flickerInterval);
-          element.style.backgroundColor = "black";
-          arrow.style.visibility = "hidden";
-          resolve();
-        }, duration);
+        function animate(timestamp) {
+          const t = (timestamp - t0) / 1000;
+          
+          // 点滅ロジック
+          element.style.backgroundColor = Math.sin(2 * Math.PI * freq * t) > 0 ? "white" : "black";
+
+          // --- 【重要】1秒〜4秒 (中間の3秒間) のカーソル判定 ---
+          const currentElapsed = timestamp - t0;
+          if (lastTimestamp - t0 < 4000 && currentElapsed > 1000) {
+            let tStart = Math.max(1000, lastTimestamp - t0);
+            let tEnd = Math.min(4000, currentElapsed);
+            if (tEnd > tStart) {
+              const isHovered = direction === "left" ? leftHovered : rightHovered;
+              if (isHovered) {
+                matchTime += (tEnd - tStart); // ホバーされていた時間をミリ秒単位で加算
+              }
+            }
+          }
+          lastTimestamp = timestamp;
+
+          if (currentElapsed < duration) {
+            requestAnimationFrame(animate);
+          } else {
+            element.style.backgroundColor = "black";
+            arrow.style.visibility = "hidden";
+            
+            // 3秒間 (3000ms) に対する割合を計算
+            const percentage = (matchTime / 3000 * 100).toFixed(1);
+            experimentResults.push({
+              trial: experimentResults.length + 1,
+              target: direction === "left" ? "左" : "right" ? "右" : "不明",
+              freq: freq,
+              percent: percentage
+            });
+            
+            resolve();
+          }
+        }
+        requestAnimationFrame(animate);
       });
     }
 
@@ -195,15 +251,46 @@
         arrow.textContent = direction === "left" ? "←" : "→";
         arrow.style.visibility = "visible";
 
+        let matchTime = 0;       // カーソルが合っていた時間 (ms)
+        let lastTimestamp = t0;
+
         function animate(timestamp) {
           const t = (timestamp - t0) / 1000;
           left.style.backgroundColor = Math.sin(2 * Math.PI * leftFreq * t) > 0 ? "white" : "black";
           right.style.backgroundColor = Math.sin(2 * Math.PI * rightFreq * t) > 0 ? "white" : "black";
-          if (timestamp - t0 < duration) requestAnimationFrame(animate);
-          else {
+
+          // --- 【重要】1秒〜4秒 (中間の3秒間) のカーソル判定 ---
+          const currentElapsed = timestamp - t0;
+          if (lastTimestamp - t0 < 4000 && currentElapsed > 1000) {
+            let tStart = Math.max(1000, lastTimestamp - t0);
+            let tEnd = Math.min(4000, currentElapsed);
+            if (tEnd > tStart) {
+              // 指示されたターゲット(矢印の方向)にカーソルが合っているかを判定
+              const isHovered = direction === "left" ? leftHovered : rightHovered;
+              if (isHovered) {
+                matchTime += (tEnd - tStart);
+              }
+            }
+          }
+          lastTimestamp = timestamp;
+
+          if (timestamp - t0 < duration) {
+            requestAnimationFrame(animate);
+          } else {
             left.style.backgroundColor = "black";
             right.style.backgroundColor = "black";
             arrow.style.visibility = "hidden";
+
+            // 3秒間 (3000ms) に対する割合を計算
+            const percentage = (matchTime / 3000 * 100).toFixed(1);
+            const activeFreq = direction === "left" ? leftFreq : rightFreq;
+            experimentResults.push({
+              trial: experimentResults.length + 1,
+              target: direction === "left" ? "左" : "右",
+              freq: activeFreq,
+              percent: percentage
+            });
+
             resolve();
           }
         }
@@ -215,6 +302,10 @@
     async function runExperiment() {
       restartBtn.style.visibility = "hidden";
       backBtn.style.visibility = "hidden";
+      resultsPanel.style.visibility = "hidden";
+      resultsList.innerHTML = "";
+      experimentResults = []; // 結果データをクリア
+
       countdown.textContent = "安静";
       await rest(5000);
       await showCountdown(5);
@@ -238,7 +329,18 @@
         await startDualFlicker(6, 10, 5000, "right");
       }
 
+      // ===== 実験終了後の結果画面表示 =====
       countdown.textContent = "実験終了";
+      
+      // 保存したデータをリストにして生成
+      experimentResults.forEach(res => {
+        const li = document.createElement("li");
+        li.innerHTML = `試行 ${res.trial}: ターゲット [<strong>${res.target}</strong> (${res.freq}Hz)] ➔ 注視成功率: <strong>${res.percent}%</strong>`;
+        resultsList.appendChild(li);
+      });
+
+      // 結果パネルとボタンを表示
+      resultsPanel.style.visibility = "visible";
       restartBtn.style.visibility = "visible";
       backBtn.style.visibility = "visible";
     }
@@ -253,12 +355,6 @@
       menu.style.display = "block";
       countdown.textContent = "";
     };
-
-    // ===== iPhone向けタッチ対応 =====
-    [left, right].forEach(el => {
-      el.addEventListener("touchstart", () => el.style.border = "4px solid red");
-      el.addEventListener("touchend", () => el.style.border = "4px solid transparent");
-    });
   </script>
 </body>
 </html>
