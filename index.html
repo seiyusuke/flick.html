@@ -1,7 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>SSVEP 実験選択 (高精度計測・修正版)</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: black;
+      color: white;
+      font-family: sans-serif;
+      text-align: center;
+      overflow: hidden;
+    }
+
+    h1 {
+      margin-top: 15%;
+      font-size: 48px;
+    }
+
+    .menu-button {
+      display: inline-block;
+      margin: 40px;
+      padding: 20px 60px;
+      font-size: 32px;
+      background-color: #333;
+      border: none;
+      border-radius: 10px;
+      color: white;
+      cursor: pointer;
+    }
+
+    .menu-button:hover {
+      background-color: #666;
+    }
+
+    #experiment-container {
+      display: none;
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .square {
+      width: 300px;
+      height: 300px;
+      background-color: black;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 4px solid transparent;
       box-sizing: border-box;
       transition: border 0.2s;
     }
 
+    /* PCでの視認用赤枠 */
     .square:hover {
       border: 4px solid red;
     }
@@ -13,6 +65,7 @@
     #right {
       left: calc(50% + 100px);
     }
+    
     #arrow {
       position: absolute;
       top: 50%;
@@ -24,29 +77,30 @@
 
     #countdown {
       position: absolute;
-      top: 20%;
+      top: 15%;
       left: 50%;
       transform: translate(-50%, -50%);
       font-size: 60px;
     }
 
-    /* === 結果表示パネルのスタイルを追加 === */
+    /* === 結果表示パネル（重なりと表示不具合を修正） === */
     #results-panel {
       position: absolute;
-      top: 50%;
+      top: 45%;
       left: 50%;
       transform: translate(-50%, -50%);
       font-size: 24px;
-      background-color: rgba(34, 34, 34, 0.95);
+      background-color: rgba(30, 30, 30, 0.95);
       padding: 30px 50px;
       border-radius: 12px;
       border: 2px solid #555;
-      max-height: 45vh;
+      max-height: 50vh;
       overflow-y: auto;
-      visibility: hidden;
+      display: none; /* visibilityからdisplay方式に変更して確実化 */
       text-align: left;
-      min-width: 450px;
-      box-shadow: 0px 4px 20px rgba(255, 255, 255, 0.1);
+      min-width: 500px;
+      box-shadow: 0px 4px 25px rgba(255, 0, 0, 0.2);
+      z-index: 999; /* 最前面に配置 */
     }
 
     #results-panel h2 {
@@ -65,10 +119,11 @@
     }
 
     #results-list li {
-      margin: 12px 0;
+      margin: 14px 0;
       font-family: monospace;
       border-bottom: 1px dashed #444;
-      padding-bottom: 6px;
+      padding-bottom: 8px;
+      font-size: 20px;
     }
 
     #restart-btn, #back-btn {
@@ -80,16 +135,17 @@
       border: none;
       border-radius: 8px;
       cursor: pointer;
-      visibility: hidden;
+      display: none;
+      z-index: 1000;
     }
 
     #restart-btn {
-      top: 80%;
+      top: 78%;
       left: calc(50% - 180px);
     }
 
     #back-btn {
-      top: 80%;
+      top: 78%;
       left: calc(50% + 180px);
     }
 
@@ -136,23 +192,22 @@
     const backBtn = document.getElementById("back-btn");
 
     let currentExperiment = null;
-    let experimentResults = []; // 各試行の結果を格納する配列
+    let experimentResults = [];
 
-    // === ホバー・タッチ状態の追跡用フラグ ===
-    let leftHovered = false;
-    let rightHovered = false;
+    // === iPhoneなどのタッチ状態を確実に保持するためのカスタムデータ属性 ===
+    left.addEventListener("touchstart", (e) => { left.dataset.touched = "true"; left.style.border = "4px solid red"; });
+    left.addEventListener("touchend", () => { left.dataset.touched = "false"; left.style.border = "4px solid transparent"; });
+    right.addEventListener("touchstart", (e) => { right.dataset.touched = "true"; right.style.border = "4px solid red"; });
+    right.addEventListener("touchend", () => { right.dataset.touched = "false"; right.style.border = "4px solid transparent"; });
 
-    // マウスホバーの検知
-    left.addEventListener("mouseenter", () => leftHovered = true);
-    left.addEventListener("mouseleave", () => leftHovered = false);
-    right.addEventListener("mouseenter", () => rightHovered = true);
-    right.addEventListener("mouseleave", () => rightHovered = false);
-
-    // iPhone向けタッチ対応 ＆ フラグ連動
-    left.addEventListener("touchstart", () => { leftHovered = true; left.style.border = "4px solid red"; });
-    left.addEventListener("touchend", () => { leftHovered = false; left.style.border = "4px solid transparent"; });
-    right.addEventListener("touchstart", () => { rightHovered = true; right.style.border = "4px solid red"; });
-    right.addEventListener("touchend", () => { rightHovered = false; right.style.border = "4px solid transparent"; });
+    // === 【最重要】高速点滅時でもブラウザの状態を直接引っこ抜く判定関数 ===
+    function isTargetLookedAt(element) {
+      // PCの場合：現在のマウス位置が要素上にあるかをリアルタイム判定
+      const isHovered = element.matches(':hover');
+      // スマホの場合：タッチ中フラグを判定
+      const isTouched = element.dataset.touched === "true";
+      return isHovered || isTouched;
+    }
 
     // ===== 実験選択 =====
     document.getElementById("exp1-btn").onclick = () => startExperiment(1);
@@ -192,14 +247,14 @@
       });
     }
 
-    // ===== 実験1：片側点滅 (時間計測の厳密化のため、requestAnimationFrame方式にアップデート) =====
+    // ===== 実験1：片側点滅 =====
     async function startFlicker(element, freq, duration, direction) {
       return new Promise(resolve => {
         let t0 = performance.now();
         arrow.textContent = direction === "left" ? "←" : "→";
         arrow.style.visibility = "visible";
 
-        let matchTime = 0;       // カーソルが合っていた時間 (ms)
+        let matchTime = 0;
         let lastTimestamp = t0;
 
         function animate(timestamp) {
@@ -208,15 +263,14 @@
           // 点滅ロジック
           element.style.backgroundColor = Math.sin(2 * Math.PI * freq * t) > 0 ? "white" : "black";
 
-          // --- 【重要】1秒〜4秒 (中間の3秒間) のカーソル判定 ---
+          // 1秒〜4秒 (中間の3秒間) のカーソル判定
           const currentElapsed = timestamp - t0;
           if (lastTimestamp - t0 < 4000 && currentElapsed > 1000) {
             let tStart = Math.max(1000, lastTimestamp - t0);
             let tEnd = Math.min(4000, currentElapsed);
             if (tEnd > tStart) {
-              const isHovered = direction === "left" ? leftHovered : rightHovered;
-              if (isHovered) {
-                matchTime += (tEnd - tStart); // ホバーされていた時間をミリ秒単位で加算
+              if (isTargetLookedAt(element)) {
+                matchTime += (tEnd - tStart);
               }
             }
           }
@@ -228,11 +282,10 @@
             element.style.backgroundColor = "black";
             arrow.style.visibility = "hidden";
             
-            // 3秒間 (3000ms) に対する割合を計算
             const percentage = (matchTime / 3000 * 100).toFixed(1);
             experimentResults.push({
               trial: experimentResults.length + 1,
-              target: direction === "left" ? "左" : "right" ? "右" : "不明",
+              target: direction === "left" ? "左" : "右",
               freq: freq,
               percent: percentage
             });
@@ -251,7 +304,7 @@
         arrow.textContent = direction === "left" ? "←" : "→";
         arrow.style.visibility = "visible";
 
-        let matchTime = 0;       // カーソルが合っていた時間 (ms)
+        let matchTime = 0;
         let lastTimestamp = t0;
 
         function animate(timestamp) {
@@ -259,15 +312,14 @@
           left.style.backgroundColor = Math.sin(2 * Math.PI * leftFreq * t) > 0 ? "white" : "black";
           right.style.backgroundColor = Math.sin(2 * Math.PI * rightFreq * t) > 0 ? "white" : "black";
 
-          // --- 【重要】1秒〜4秒 (中間の3秒間) のカーソル判定 ---
+          // 1秒〜4秒 (中間の3秒間) のカーソル判定
           const currentElapsed = timestamp - t0;
           if (lastTimestamp - t0 < 4000 && currentElapsed > 1000) {
             let tStart = Math.max(1000, lastTimestamp - t0);
             let tEnd = Math.min(4000, currentElapsed);
             if (tEnd > tStart) {
-              // 指示されたターゲット(矢印の方向)にカーソルが合っているかを判定
-              const isHovered = direction === "left" ? leftHovered : rightHovered;
-              if (isHovered) {
+              const targetElement = direction === "left" ? left : right;
+              if (isTargetLookedAt(targetElement)) {
                 matchTime += (tEnd - tStart);
               }
             }
@@ -281,7 +333,6 @@
             right.style.backgroundColor = "black";
             arrow.style.visibility = "hidden";
 
-            // 3秒間 (3000ms) に対する割合を計算
             const percentage = (matchTime / 3000 * 100).toFixed(1);
             const activeFreq = direction === "left" ? leftFreq : rightFreq;
             experimentResults.push({
@@ -300,11 +351,16 @@
 
     // ===== 実験実行 =====
     async function runExperiment() {
-      restartBtn.style.visibility = "hidden";
-      backBtn.style.visibility = "hidden";
-      resultsPanel.style.visibility = "hidden";
+      // 画面要素の初期化（表示を元に戻す）
+      left.style.display = "block";
+      right.style.display = "block";
+      arrow.style.visibility = "hidden";
+      
+      restartBtn.style.display = "none";
+      backBtn.style.display = "none";
+      resultsPanel.style.display = "none";
       resultsList.innerHTML = "";
-      experimentResults = []; // 結果データをクリア
+      experimentResults = [];
 
       countdown.textContent = "安静";
       await rest(5000);
@@ -332,17 +388,22 @@
       // ===== 実験終了後の結果画面表示 =====
       countdown.textContent = "実験終了";
       
-      // 保存したデータをリストにして生成
+      // 結果表示の邪魔にならないよう、実験刺激要素を一時的に非表示にする
+      left.style.display = "none";
+      right.style.display = "none";
+      arrow.style.visibility = "hidden";
+
+      // データをリストにして生成
       experimentResults.forEach(res => {
         const li = document.createElement("li");
-        li.innerHTML = `試行 ${res.trial}: ターゲット [<strong>${res.target}</strong> (${res.freq}Hz)] ➔ 注視成功率: <strong>${res.percent}%</strong>`;
+        li.innerHTML = `試行 ${res.trial}: ターゲット [<strong>${res.target}</strong> (${res.freq}Hz)] ➔ 注視成功率: <strong style="color: #ff4d4d;">${res.percent}%</strong>`;
         resultsList.appendChild(li);
       });
 
       // 結果パネルとボタンを表示
-      resultsPanel.style.visibility = "visible";
-      restartBtn.style.visibility = "visible";
-      backBtn.style.visibility = "visible";
+      resultsPanel.style.display = "block";
+      restartBtn.style.display = "block";
+      backBtn.style.display = "block";
     }
 
     restartBtn.onclick = () => {
