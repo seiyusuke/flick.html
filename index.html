@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>SSVEP 実験選択 (高精度計測・修正版)</title>
+  <title>SSVEP 実験選択 (4方向高精度計測版)</title>
   <style>
     body {
       margin: 0;
@@ -41,13 +41,12 @@
       height: 100vh;
     }
 
+    /* 正方形刺激（4方向配置用にサイズと位置を調整） */
     .square {
-      width: 300px;
-      height: 300px;
+      width: 220px;
+      height: 220px;
       background-color: black;
       position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
       border: 4px solid transparent;
       box-sizing: border-box;
       transition: border 0.2s;
@@ -58,12 +57,29 @@
       border: 4px solid red;
     }
 
+    /* 十字配置 */
+    #top {
+      top: calc(50% - 280px);
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    #bottom {
+      top: calc(50% + 280px);
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
     #left {
-      left: calc(50% - 400px);
+      top: 50%;
+      left: calc(50% - 320px);
+      transform: translate(-50%, -50%);
     }
 
     #right {
-      left: calc(50% + 100px);
+      top: 50%;
+      left: calc(50% + 320px);
+      transform: translate(-50%, -50%);
     }
     
     #arrow {
@@ -83,7 +99,7 @@
       font-size: 60px;
     }
 
-    /* === 結果表示パネル（重なりと表示不具合を修正） === */
+    /* === 結果表示パネル === */
     #results-panel {
       position: absolute;
       top: 45%;
@@ -96,11 +112,11 @@
       border: 2px solid #555;
       max-height: 50vh;
       overflow-y: auto;
-      display: none; /* visibilityからdisplay方式に変更して確実化 */
+      display: none;
       text-align: left;
       min-width: 500px;
       box-shadow: 0px 4px 25px rgba(255, 0, 0, 0.2);
-      z-index: 999; /* 最前面に配置 */
+      z-index: 999;
     }
 
     #results-panel h2 {
@@ -158,14 +174,16 @@
   <!-- === 実験選択画面 === -->
   <div id="menu">
     <h1>実験を選択してください</h1>
-    <button class="menu-button" id="exp1-btn">実験1</button>
-    <button class="menu-button" id="exp2-btn">実験2</button>
+    <button class="menu-button" id="exp1-btn">実験1 (単独点滅)</button>
+    <button class="menu-button" id="exp2-btn">実験2 (同時点滅)</button>
   </div>
 
   <!-- === 実験画面 === -->
   <div id="experiment-container">
-    <div id="left" class="square"></div>
+    <div id="top" class="square"></div>
     <div id="right" class="square"></div>
+    <div id="bottom" class="square"></div>
+    <div id="left" class="square"></div>
     <div id="arrow"></div>
     <div id="countdown"></div>
     
@@ -182,8 +200,6 @@
   <script>
     const menu = document.getElementById("menu");
     const container = document.getElementById("experiment-container");
-    const left = document.getElementById("left");
-    const right = document.getElementById("right");
     const arrow = document.getElementById("arrow");
     const countdown = document.getElementById("countdown");
     const resultsPanel = document.getElementById("results-panel");
@@ -191,25 +207,32 @@
     const restartBtn = document.getElementById("restart-btn");
     const backBtn = document.getElementById("back-btn");
 
+    // 4方向ターゲットの設定情報
+    const TARGETS = {
+      top:    { element: document.getElementById("top"),    freq: 6,  label: "上", arrow: "↑" },
+      right:  { element: document.getElementById("right"),  freq: 8,  label: "右", arrow: "→" },
+      bottom: { element: document.getElementById("bottom"), freq: 15, label: "下", arrow: "↓" },
+      left:   { element: document.getElementById("left"),   freq: 20, label: "左", arrow: "←" }
+    };
+
     let currentExperiment = null;
     let experimentResults = [];
 
-    // === iPhoneなどのタッチ状態を確実に保持するためのカスタムデータ属性 ===
-    left.addEventListener("touchstart", (e) => { left.dataset.touched = "true"; left.style.border = "4px solid red"; });
-    left.addEventListener("touchend", () => { left.dataset.touched = "false"; left.style.border = "4px solid transparent"; });
-    right.addEventListener("touchstart", (e) => { right.dataset.touched = "true"; right.style.border = "4px solid red"; });
-    right.addEventListener("touchend", () => { right.dataset.touched = "false"; right.style.border = "4px solid transparent"; });
+    // タッチイベントの設定
+    Object.keys(TARGETS).forEach(key => {
+      const el = TARGETS[key].element;
+      el.addEventListener("touchstart", () => { el.dataset.touched = "true"; el.style.border = "4px solid red"; });
+      el.addEventListener("touchend", () => { el.dataset.touched = "false"; el.style.border = "4px solid transparent"; });
+    });
 
-    // === 【最重要】高速点滅時でもブラウザの状態を直接引っこ抜く判定関数 ===
+    // 判定関数
     function isTargetLookedAt(element) {
-      // PCの場合：現在のマウス位置が要素上にあるかをリアルタイム判定
       const isHovered = element.matches(':hover');
-      // スマホの場合：タッチ中フラグを判定
       const isTouched = element.dataset.touched === "true";
       return isHovered || isTouched;
     }
 
-    // ===== 実験選択 =====
+    // メニュー選択
     document.getElementById("exp1-btn").onclick = () => startExperiment(1);
     document.getElementById("exp2-btn").onclick = () => startExperiment(2);
 
@@ -220,7 +243,7 @@
       runExperiment();
     }
 
-    // ===== 安静・カウントダウン共通関数 =====
+    // 安静・カウントダウン
     function rest(duration, label = "安静") {
       return new Promise(resolve => {
         countdown.textContent = label;
@@ -247,11 +270,13 @@
       });
     }
 
-    // ===== 実験1：片側点滅 =====
-    async function startFlicker(element, freq, duration, direction) {
+    // ===== 実験1：単独点滅 (指定した1箇所のみ点滅) =====
+    async function startSingleFlicker(targetKey, duration) {
       return new Promise(resolve => {
         let t0 = performance.now();
-        arrow.textContent = direction === "left" ? "←" : "→";
+        const target = TARGETS[targetKey];
+        
+        arrow.textContent = target.arrow;
         arrow.style.visibility = "visible";
 
         let matchTime = 0;
@@ -260,8 +285,8 @@
         function animate(timestamp) {
           const t = (timestamp - t0) / 1000;
           
-          // 点滅ロジック
-          element.style.backgroundColor = Math.sin(2 * Math.PI * freq * t) > 0 ? "white" : "black";
+          // 対象ターゲットのみ点滅
+          target.element.style.backgroundColor = Math.sin(2 * Math.PI * target.freq * t) > 0 ? "white" : "black";
 
           // 1秒〜4秒 (中間の3秒間) のカーソル判定
           const currentElapsed = timestamp - t0;
@@ -269,7 +294,7 @@
             let tStart = Math.max(1000, lastTimestamp - t0);
             let tEnd = Math.min(4000, currentElapsed);
             if (tEnd > tStart) {
-              if (isTargetLookedAt(element)) {
+              if (isTargetLookedAt(target.element)) {
                 matchTime += (tEnd - tStart);
               }
             }
@@ -279,14 +304,14 @@
           if (currentElapsed < duration) {
             requestAnimationFrame(animate);
           } else {
-            element.style.backgroundColor = "black";
+            target.element.style.backgroundColor = "black";
             arrow.style.visibility = "hidden";
             
             const percentage = (matchTime / 3000 * 100).toFixed(1);
             experimentResults.push({
               trial: experimentResults.length + 1,
-              target: direction === "left" ? "左" : "右",
-              freq: freq,
+              target: target.label,
+              freq: target.freq,
               percent: percentage
             });
             
@@ -297,11 +322,13 @@
       });
     }
 
-    // ===== 実験2：同時点滅 =====
-    async function startDualFlicker(leftFreq, rightFreq, duration, direction) {
+    // ===== 実験2：同時点滅 (4箇所同時に各周波数で点滅) =====
+    async function startQuadFlicker(targetKey, duration) {
       return new Promise(resolve => {
         let t0 = performance.now();
-        arrow.textContent = direction === "left" ? "←" : "→";
+        const currentTarget = TARGETS[targetKey];
+        
+        arrow.textContent = currentTarget.arrow;
         arrow.style.visibility = "visible";
 
         let matchTime = 0;
@@ -309,8 +336,12 @@
 
         function animate(timestamp) {
           const t = (timestamp - t0) / 1000;
-          left.style.backgroundColor = Math.sin(2 * Math.PI * leftFreq * t) > 0 ? "white" : "black";
-          right.style.backgroundColor = Math.sin(2 * Math.PI * rightFreq * t) > 0 ? "white" : "black";
+
+          // 4つのターゲット全てを各自の周波数で点滅
+          Object.keys(TARGETS).forEach(key => {
+            const item = TARGETS[key];
+            item.element.style.backgroundColor = Math.sin(2 * Math.PI * item.freq * t) > 0 ? "white" : "black";
+          });
 
           // 1秒〜4秒 (中間の3秒間) のカーソル判定
           const currentElapsed = timestamp - t0;
@@ -318,27 +349,27 @@
             let tStart = Math.max(1000, lastTimestamp - t0);
             let tEnd = Math.min(4000, currentElapsed);
             if (tEnd > tStart) {
-              const targetElement = direction === "left" ? left : right;
-              if (isTargetLookedAt(targetElement)) {
+              if (isTargetLookedAt(currentTarget.element)) {
                 matchTime += (tEnd - tStart);
               }
             }
           }
           lastTimestamp = timestamp;
 
-          if (timestamp - t0 < duration) {
+          if (currentElapsed < duration) {
             requestAnimationFrame(animate);
           } else {
-            left.style.backgroundColor = "black";
-            right.style.backgroundColor = "black";
+            // 全ての要素を消灯
+            Object.keys(TARGETS).forEach(key => {
+              TARGETS[key].element.style.backgroundColor = "black";
+            });
             arrow.style.visibility = "hidden";
 
             const percentage = (matchTime / 3000 * 100).toFixed(1);
-            const activeFreq = direction === "left" ? leftFreq : rightFreq;
             experimentResults.push({
               trial: experimentResults.length + 1,
-              target: direction === "left" ? "左" : "右",
-              freq: activeFreq,
+              target: currentTarget.label,
+              freq: currentTarget.freq,
               percent: percentage
             });
 
@@ -349,11 +380,13 @@
       });
     }
 
-    // ===== 実験実行 =====
+    // ===== 実験実行メイン処理 =====
     async function runExperiment() {
-      // 画面要素の初期化（表示を元に戻す）
-      left.style.display = "block";
-      right.style.display = "block";
+      // 画面要素の初期表示設定
+      Object.keys(TARGETS).forEach(key => {
+        TARGETS[key].element.style.display = "block";
+        TARGETS[key].element.style.backgroundColor = "black";
+      });
       arrow.style.visibility = "hidden";
       
       restartBtn.style.display = "none";
@@ -366,41 +399,39 @@
       await rest(5000);
       await showCountdown(5);
 
+      const targetOrder = ["top", "right", "bottom", "left"];
+
       if (currentExperiment === 1) {
-        await startFlicker(left, 5, 5000, "left");
-        await rest(3000);
-        await startFlicker(right, 12, 5000, "right");
-        await rest(3000);
-        await startFlicker(left, 6, 5000, "left");
-        await rest(3000);
-        await startFlicker(right, 10, 5000, "right");
+        // 実験1：順番に単独点滅
+        for (let i = 0; i < targetOrder.length; i++) {
+          await startSingleFlicker(targetOrder[i], 5000);
+          if (i < targetOrder.length - 1) await rest(3000);
+        }
       } else if (currentExperiment === 2) {
-        await startDualFlicker(5, 12, 5000, "left");
-        await rest(3000);
-        await startDualFlicker(5, 12, 5000, "right");
-        await rest(5000);
-        await showCountdown(5);
-        await startDualFlicker(6, 10, 5000, "left");
-        await rest(3000);
-        await startDualFlicker(6, 10, 5000, "right");
+        // 実験2：4方向同時点滅の中で指示されたターゲットを注視
+        for (let i = 0; i < targetOrder.length; i++) {
+          await startQuadFlicker(targetOrder[i], 5000);
+          if (i < targetOrder.length - 1) await rest(3000);
+        }
       }
 
-      // ===== 実験終了後の結果画面表示 =====
+      // ===== 実験終了処理 =====
       countdown.textContent = "実験終了";
       
-      // 結果表示の邪魔にならないよう、実験刺激要素を一時的に非表示にする
-      left.style.display = "none";
-      right.style.display = "none";
+      // 結果表示のために刺激枠を非表示化
+      Object.keys(TARGETS).forEach(key => {
+        TARGETS[key].element.style.display = "none";
+      });
       arrow.style.visibility = "hidden";
 
-      // データをリストにして生成
+      // 結果リスト生成
       experimentResults.forEach(res => {
         const li = document.createElement("li");
         li.innerHTML = `試行 ${res.trial}: ターゲット [<strong>${res.target}</strong> (${res.freq}Hz)] ➔ 注視成功率: <strong style="color: #ff4d4d;">${res.percent}%</strong>`;
         resultsList.appendChild(li);
       });
 
-      // 結果パネルとボタンを表示
+      // パネル表示
       resultsPanel.style.display = "block";
       restartBtn.style.display = "block";
       backBtn.style.display = "block";
