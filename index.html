@@ -67,8 +67,8 @@
       border: 4px solid #555;
     }
 
-    /* RTFB用：注視対象の赤枠強調 */
-    .square.highlight {
+    /* RTFB用：注視対象の赤枠強調（カーソルが乗っていても赤枠を優先・維持） */
+    .square.highlight, .square.highlight:hover {
       border: 6px solid red !important;
     }
 
@@ -158,7 +158,7 @@
     const backBtn = document.getElementById("back-btn");
 
     let currentExperiment = null; // 1 or 2
-    let isRTFB = false;           // true or false
+    let isRTFB = false;            // true or false
 
     // ===== 実験選択ボタン =====
     document.getElementById("exp1-no-rtfb").onclick = () => startExperiment(1, false);
@@ -172,7 +172,7 @@
       menu.style.display = "none";
       container.style.display = "block";
       runExperiment();
-    }
+まったく    }
 
     // ハイライト（赤枠）の全解除関数
     function clearHighlights() {
@@ -217,9 +217,12 @@
         arrow.textContent = direction === "left" ? "←" : "→";
         arrow.style.visibility = "visible";
 
-        // RTFBありの場合、点滅中のターゲット要素を赤枠で囲む
+        let rtfbTimer = null;
+        // RTFBありの場合、点滅開始から「1秒後」に赤枠を追加
         if (isRTFB) {
-          element.classList.add("highlight");
+          rtfbTimer = setTimeout(() => {
+            element.classList.add("highlight");
+          }, 1000);
         }
 
         const flickerInterval = setInterval(() => {
@@ -229,6 +232,7 @@
 
         setTimeout(() => {
           clearInterval(flickerInterval);
+          if (rtfbTimer) clearTimeout(rtfbTimer);
           element.style.backgroundColor = "black";
           arrow.style.visibility = "hidden";
           clearHighlights();
@@ -244,10 +248,13 @@
         arrow.textContent = direction === "left" ? "←" : "→";
         arrow.style.visibility = "visible";
 
-        // RTFBありの場合、矢印が指している（注視すべき）刺激を赤枠で囲む
+        let rtfbTimer = null;
+        // RTFBありの場合、点滅開始から「1秒後」に赤枠を追加
         if (isRTFB) {
-          const targetEl = direction === "left" ? left : right;
-          targetEl.classList.add("highlight");
+          rtfbTimer = setTimeout(() => {
+            const targetEl = direction === "left" ? left : right;
+            targetEl.classList.add("highlight");
+          }, 1000);
         }
 
         function animate(timestamp) {
@@ -258,6 +265,7 @@
           if (timestamp - t0 < duration) {
             requestAnimationFrame(animate);
           } else {
+            if (rtfbTimer) clearTimeout(rtfbTimer);
             left.style.backgroundColor = "black";
             right.style.backgroundColor = "black";
             arrow.style.visibility = "hidden";
